@@ -24,8 +24,9 @@ def keep_alive():
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True  # أساسي لقراءة النصوص بدون Slash
-intents.members = True          # أساسي للتحكم بالأعضاء (طرد، حظر، تايم أوت)
+intents.members = True          # أساسي للتحكم بالأعضاء (طرد، حظر، تايم أوت، نقل)
 intents.bans = True
+intents.voice_states = True     # أساسي للتحكم بالأعضاء في الرومات الصوتية (سحب)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -202,6 +203,39 @@ async def on_message(message):
                 await message.channel.send("❌ لا أمتلك صلاحية لفك التايم أوت عن هذا العضو.")
         else:
             await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 9. أمر سحب (نقل العضو إلى رومك الصوتي) =================
+    elif command == "سحب":
+        if not message.author.guild_permissions.move_members:
+            await message.channel.send("❌ ليس لديك صلاحية نقل الأعضاء (Move Members).")
+            return
+
+        # التحقق مما إذا كان مرسل الأمر داخل روم صوتي
+        if not message.author.voice or not message.author.voice.channel:
+            await message.channel.send("❌ يجب أن تكون متواجد في روم صوتي أولاً لتتمكن من سحب العضو.")
+            return
+
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن أو الـ ID. مثال: `سحب @user`")
+            return
+
+        member = message.guild.get_member(user_id)
+        if member:
+            # التحقق مما إذا كان العضو المستهدف داخل روم صوتي
+            if not member.voice or not member.voice.channel:
+                await message.channel.send(f"❌ العضو {member.mention} ليس متواجداً في أي روم صوتي حالياً.")
+                return
+
+            try:
+                # نقل العضو إلى الروم الصوتي الخاص بك
+                target_channel = message.author.voice.channel
+                await member.move_to(target_channel)
+                await message.channel.send(f"📥 تم سحب {member.mention} إلى الروم الصوتي `{target_channel.name}` بنجاح.")
+            except discord.Forbidden:
+                await message.channel.send("❌ لا أمتلك صلاحية نقل الأعضاء في هذا الروم أو رتبة البوت أقل من العضو.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على هذا العضو في السيرفر.")
 
     await bot.process_commands(message)
 
