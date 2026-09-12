@@ -1,168 +1,216 @@
 import os
-import threading
-from datetime import timedelta
-from flask import Flask
+import re
+import datetime
 import discord
 from discord.ext import commands
-from discord import app_commands
+from flask import Flask
+from threading import Thread
 
-# ==========================================
-# 1. سيرفر الويب المانع للتوقف (Flask Keep-Alive)
-# ==========================================
-app = Flask(__name__)
+# --- 1. إعداد سيرفر Flask لضمان استمرار عمل البوت (Keep-Alive) ---
+app = Flask('')
 
 @app.route('/')
 def home():
-    return "Elv System Bot is Online 24/7!"
+    return "Bot is running!"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+def run():
+    app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
-    t = threading.Thread(target=run_flask)
-    t.daemon = True
+    t = Thread(target=run)
     t.start()
 
-# ==========================================
-# 2. إعدادات البوت والـ Intents
-# ==========================================
+# --- 2. إعداد نوايا البوت (Intents) ---
 intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
+intents.messages = True
+intents.message_content = True  # أساسي لقراءة النصوص بدون Slash
+intents.members = True          # أساسي للتحكم بالأعضاء (طرد، حظر، تايم أوت)
+intents.bans = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ==========================================
-# 3. أحداث التشغيل والمزامنة
-# ==========================================
+# --- 3. دالة مساعدة لاستخراج العضو أو ID العضو ---
+def get_user_id(args):
+    if not args:
+        return None
+    # البحث عن الأرقام فقط (في حال استخدام Mention أو ID مباشر)
+    match = re.search(r'\d+', args[0])
+    if match:
+        return int(match.group())
+    return None
+
+# --- 4. الحدث الرئيسي لقراءة الرسائل والتحكم بالأوامر ---
 @bot.event
 async def on_ready():
-    print(f'✅ تم تسجيل الدخول بنجاح باسم: {bot.user.name}')
-    try:
-        synced = await bot.tree.sync()
-        print(f'✅ تم مزامنة {len(synced)} أمر مائل (Slash Commands) بنجاح.')
-    except Exception as e:
-        print(f'❌ خطأ أثناء مزامنة الأوامر: {e}')
+    print(f'Logged in as {bot.user.name} ({bot.user.id})')
+    print('Bot is ready to handle plain Arabic/English text commands!')
 
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching, 
-            name="إدارة السيرفر | /help"
-        )
-    )
-
-# ==========================================
-# 4. الأوامر الإدارية الكاملة (Slash Commands)
-# ==========================================
-
-# --- أمر التايم أوت (Timeout) ---
-@bot.tree.command(name="timeout", description="إعطاء تايم أوت (عزل مؤقت) لعضو")
-@app_commands.checks.has_permissions(moderate_members=True)
-async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "لم يتم ذكر السبب"):
-    if member.top_role >= interaction.user.top_role:
-        await interaction.response.send_message("❌ لا يمكنك إعطاء تايم أوت لشخص رتبته أعلى منك أو تساويك!", ephemeral=True)
-        return
-    
-    duration = discord.utils.utcnow() + timedelta(minutes=minutes)
-    await member.timeout(duration, reason=reason)
-    
-    embed = discord.Embed(title="⛔ حظر مؤقت (Timeout)", color=discord.Color.orange())
-    embed.add_field(name="العضو:", value=member.mention, inline=True)
-    embed.add_field(name="المدة:", value=f"{minutes} دقيقة", inline=True)
-    embed.add_field(name="السبب:", value=reason, inline=False)
-    embed.set_footer(text=f"بواسطة: {interaction.user.name}")
-    
-    await interaction.response.send_message(embed=embed)
-
-# --- أمر الباند (Ban) ---
-@bot.tree.command(name="ban", description="حظر عضو نهائياً من السيرفر")
-@app_commands.checks.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم ذكر السبب"):
-    if member.top_role >= interaction.user.top_role:
-        await interaction.response.send_message("❌ لا يمكنك إعطاء باند لشخص رتبته أعلى منك أو تساويك!", ephemeral=True)
+@bot.event
+async def on_message(message):
+    # إهمال رسائل البوتات لتجنب التكرار اللانهائي
+    if message.author.bot or not message.guild:
         return
 
-    await member.ban(reason=reason)
-    
-    embed = discord.Embed(title="🔨 حظر نهائي (Ban)", color=discord.Color.red())
-    embed.add_field(name="العضو المحظور:", value=member.mention, inline=True)
-    embed.add_field(name="السبب:", value=reason, inline=False)
-    embed.set_footer(text=f"بواسطة: {interaction.user.name}")
-    
-    await interaction.response.send_message(embed=embed)
-
-# --- أمر فك الباند (Unban) ---
-@bot.tree.command(name="unban", description="فك الحظر عن عضو بواسطة ID الخاص به")
-@app_commands.checks.has_permissions(ban_members=True)
-async def unban(interaction: discord.Interaction, user_id: str):
-    try:
-        user = await bot.fetch_user(int(user_id))
-        await interaction.guild.unban(user)
-        await interaction.response.send_message(f"✅ تم فك الحظر بنجاح عن **{user.name}**.")
-    except Exception:
-        await interaction.response.send_message("❌ لم يتم العثور على العضو أو الـ ID غير صحيح.", ephemeral=True)
-
-# --- أمر الطرد (Kick) ---
-@bot.tree.command(name="kick", description="طرد عضو من السيرفر")
-@app_commands.checks.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم ذكر السبب"):
-    if member.top_role >= interaction.user.top_role:
-        await interaction.response.send_message("❌ لا يمكنك طرد شخص رتبته أعلى منك أو تساويك!", ephemeral=True)
+    # تقسيم الرسالة إلى الكلمة الرئيسية والوسائط المتعددة (Arguments)
+    parts = message.content.strip().split()
+    if not parts:
         return
 
-    await member.kick(reason=reason)
-    await interaction.response.send_message(f"👞 تم طرد العضو **{member.name}** | السبب: {reason}")
+    command = parts[0].lower()
+    args = parts[1:]
 
-# --- أمر مسح الشات (Clear) ---
-@bot.tree.command(name="clear", description="مسح عدد معين من الرسائل")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear(interaction: discord.Interaction, amount: int):
-    if amount < 1 or amount > 100:
-        await interaction.response.send_message("❌ يرجى تحديد عدد بين 1 و 100.", ephemeral=True)
-        return
+    # ================= 1. أمر قفل =================
+    if command == "قفل":
+        if not message.author.guild_permissions.manage_channels:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
+            return
+        await message.channel.set_permissions(message.guild.default_role, send_messages=False)
+        await message.channel.send("🔒 تم قفل الكتابة في القناة بنجاح.")
 
-    await interaction.response.defer(ephemeral=True)
-    deleted = await interaction.channel.purge(limit=amount)
-    await interaction.followup.send(f"🧹 تم مسح {len(deleted)} رسالة بنجاح.")
+    # ================= 2. أمر فتح =================
+    elif command == "فتح":
+        if not message.author.guild_permissions.manage_channels:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
+            return
+        await message.channel.send("🔓 تم فتح الكتابة في القناة بنجاح.")
+        await message.channel.set_permissions(message.guild.default_role, send_messages=True)
 
-# --- أمر قفل الروم (Lock) ---
-@bot.tree.command(name="lock", description="قفل الكتابة في القناة الحالية")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def lock(interaction: discord.Interaction):
-    channel = interaction.channel
-    overwrite = channel.overwrites_for(interaction.guild.default_role)
-    overwrite.send_messages = False
-    await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-    await interaction.response.send_message("🔒 تم قفل هذه القناة بنجاح.")
+    # ================= 3. أمر حذف =================
+    elif command == "حذف":
+        if not message.author.guild_permissions.manage_messages:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة الرسائل.")
+            return
+        amount = 100  # العدد الافتراضي لمسح الشات
+        if args and args[0].isdigit():
+            amount = int(args[0])
+        # حذف كلمة "حذف" نفسها ثم حذف العدد المحدد
+        await message.delete()
+        deleted = await message.channel.purge(limit=amount)
+        confirm_msg = await message.channel.send(f"🧹 تم حذف {len(deleted)} رسالة بنجاح.")
+        # حذف رسالة التأكيد بعد 3 ثوانٍ ليبقى الروم نظيفاً
+        await confirm_msg.delete(delay=3)
 
-# --- أمر فتح الروم (Unlock) ---
-@bot.tree.command(name="unlock", description="فتح الكتابة في القناة الحالية")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def unlock(interaction: discord.Interaction):
-    channel = interaction.channel
-    overwrite = channel.overwrites_for(interaction.guild.default_role)
-    overwrite.send_messages = True
-    await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-    await interaction.response.send_message("🔓 تم فتح هذه القناة بنجاح.")
+    # ================= 4. أمر طرد =================
+    elif command == "طرد":
+        if not message.author.guild_permissions.kick_members:
+            await message.channel.send("❌ ليس لديك صلاحية طرد الأعضاء.")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن أو الـ ID. مثال: `طرد @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            try:
+                await member.kick(reason=f"بواسطة {message.author}")
+                await message.channel.send(f"👞 تم طرد {member.mention} من السيرفر بنجاح.")
+            except discord.Forbidden:
+                await message.channel.send("❌ لا أمتلك صلاحيات كافية لطرد هذا العضو (قد تكون رتبته أعلى من البوت).")
+        else:
+            await message.channel.send("❌ لم يتم العثور على هذا العضو في السيرفر.")
 
-# ==========================================
-# 5. معالجة الأخطاء السلسة (منع كراش البوت)
-# ==========================================
-@bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("❌ ليس لديك الصلاحيات الكافية لاستخدام هذا الأمر!", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"❌ حدث خطأ أثناء تنفيذ الأمر: {error}", ephemeral=True)
+    # ================= 5. أمر banned =================
+    elif command == "banned":
+        if not message.author.guild_permissions.ban_members:
+            await message.channel.send("❌ ليس لديك صلاحية حظر الأعضاء.")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن أو الـ ID. مثال: `banned @user`")
+            return
+        try:
+            user = await bot.fetch_user(user_id)
+            await message.guild.ban(user, reason=f"بواسطة {message.author}")
+            await message.channel.send(f"🔨 تم حظر {user.mention} من السيرفر بنجاح.")
+        except discord.Forbidden:
+            await message.channel.send("❌ لا أمتلك صلاحيات كافية لحظر هذا العضو.")
+        except discord.NotFound:
+            await message.channel.send("❌ لم يتم العثور على العضو.")
 
-# ==========================================
-# 6. التشغيل وإحضار التوكن
-# ==========================================
-if __name__ == "__main__":
-    keep_alive()
-    TOKEN = os.environ.get("DISCORD_TOKEN")
-    if TOKEN:
-        bot.run(TOKEN)
-    else:
-        print("❌ خطأ: لم يتم العثور على DISCORD_TOKEN في متغيرات البيئة!")
+    # ================= 6. أمر فك الباند =================
+    elif command in ["فك_الباند", "فك-الباند", "فك_باند"]:
+        if not message.author.guild_permissions.ban_members:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة الحظر.")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى كتابة ID الشخص بعد الأمر. مثال: `فك الباند 123456789`")
+            return
+        try:
+            user = await bot.fetch_user(user_id)
+            await message.guild.unban(user, reason=f"بواسطة {message.author}")
+            await message.channel.send(f"✅ تم فك الحظر عن {user.mention} بنجاح.")
+        except discord.NotFound:
+            await message.channel.send("❌ هذا المستخدم غير محظور أو غير موجود.")
+        except discord.Forbidden:
+            await message.channel.send("❌ لا أمتلك صلاحية لفك الحظر.")
+
+    # أوامر كلمة "فك الباند" المكونة من كلمتين منفصلتين
+    elif len(parts) >= 2 and parts[0] == "فك" and parts[1] == "الباند":
+        if not message.author.guild_permissions.ban_members:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة الحظر.")
+            return
+        user_id = get_user_id(parts[2:])
+        if not user_id:
+            await message.channel.send("⚠️ يرجى كتابة ID الشخص بعد الأمر. مثال: `فك الباند 123456789`")
+            return
+        try:
+            user = await bot.fetch_user(user_id)
+            await message.guild.unban(user, reason=f"بواسطة {message.author}")
+            await message.channel.send(f"✅ تم فك الحظر عن {user.mention} بنجاح.")
+        except discord.NotFound:
+            await message.channel.send("❌ هذا المستخدم غير محظور أو غير موجود.")
+        except discord.Forbidden:
+            await message.channel.send("❌ لا أمتلك صلاحية لفك الحظر.")
+
+    # ================= 7. أمر off (تايم أوت) =================
+    elif command == "off":
+        if not message.author.guild_permissions.moderate_members:
+            await message.channel.send("❌ ليس لديك صلاحية إعطاء تايم أوت.")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو. مثال: `off @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            try:
+                # إعطاء تايم أوت افتراضي لمدة ساعة واحدة
+                duration = datetime.timedelta(hours=1)
+                await member.timeout(duration, reason=f"بواسطة {message.author}")
+                await message.channel.send(f"🔇 تم إعطاء تايم أوت لـ {member.mention} لمدة ساعة.")
+            except discord.Forbidden:
+                await message.channel.send("❌ لا أمتلك صلاحية لإعطاء تايم أوت لهذا العضو.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 8. أمر فك off (إزالة التايم أوت) =================
+    elif len(parts) >= 2 and parts[0] == "فك" and parts[1].lower() == "off":
+        if not message.author.guild_permissions.moderate_members:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة التايم أوت.")
+            return
+        user_id = get_user_id(parts[2:])
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو. مثال: `فك off @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            try:
+                await member.timeout(None, reason=f"بواسطة {message.author}")
+                await message.channel.send(f"🔊 تم إزالة التايم أوت عن {member.mention} بنجاح.")
+            except discord.Forbidden:
+                await message.channel.send("❌ لا أمتلك صلاحية لفك التايم أوت عن هذا العضو.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    await bot.process_commands(message)
+
+# --- 5. تشغيل السيرفر والبوت ---
+keep_alive()
+
+# استدعاء التوكن الخاص بالبوت من متغيّرات البيئة
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ Error: DISCORD_TOKEN is not set in Environment Variables.")
