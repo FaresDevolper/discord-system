@@ -441,6 +441,6 @@ async def on_message(message):
 # --- 5. تشغيل السيرفر والبوت ---
 keep_alive()
 
-TOKEN = os.getenv("MTU0NjE3NjEwMDM2NTc2MjcyMQ.G3fH0b.1qEGBv6_wOR1iDv53VDbF9g5rRQ_Avfkaq8a3E")
+TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
