@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import datetime
 import discord
 from discord.ext import commands
@@ -26,7 +27,7 @@ intents.messages = True
 intents.message_content = True  # أساسي لقراءة النصوص بدون Prefix
 intents.members = True          # أساسي للتحكم بالأعضاء
 intents.bans = True
-intents.voice_states = True     # أساسي للتحكم بالأعضاء في الرومات الصوتية
+intents.voice_states = True     # أساسي للتحكم بالصوت (Mute / Deafen / Move)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -74,23 +75,113 @@ async def on_message(message):
         await message.channel.set_permissions(message.guild.default_role, view_channel=True)
         await message.channel.send("🔓 تم إظهار وفتح الروم للجميع بنجاح.")
 
-    # ================= 3. أمر قفل الكتابة =================
-    elif full_text == "قفل الكتابة" or (len(parts) >= 2 and parts[0] == "قفل" and parts[1] == "الكتابة"):
+    # ================= 3. أمر قفل الشات (منع الكتابة فقط) =================
+    elif full_text == "قفل الشات" or command in ["قفل_الشات", "قفل-الشات"] or (len(parts) >= 2 and parts[0] == "قفل" and parts[1] == "الشات"):
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=False)
-        await message.channel.send("🚫 تم قفل الكتابة في الروم مع إبقائه ظاهراً.")
+        await message.channel.send("🚫 تم قفل الشات ومنع الكتابة للجميع بنجاح.")
 
-    # ================= 4. أمر فتح الكتابة =================
-    elif full_text == "فتح الكتابة" or (len(parts) >= 2 and parts[0] == "فتح" and parts[1] == "الكتابة"):
+    # ================= 4. أمر فتح الشات (السماح بالكتابة فقط) =================
+    elif full_text == "فتح الشات" or command in ["فتح_الشات", "فتح-الشات"] or (len(parts) >= 2 and parts[0] == "فتح" and parts[1] == "الشات"):
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=True)
-        await message.channel.send("💬 تم فتح الكتابة في الروم بنجاح.")
+        await message.channel.send("💬 تم فتح الشات والسماح بالكتابة للجميع بنجاح.")
 
-    # ================= 5. أمر حذف =================
+    # ================= 5. أمر دفن (Server Deafen باللون الأحمر) =================
+    elif command in ["دفن", "deafen"]:
+        if not message.author.guild_permissions.deafen_members:
+            await message.channel.send("❌ ليس لديك صلاحية كتم الصوت (Deafen Members).")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن. مثال: `دفن @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            if member.voice and member.voice.channel:
+                try:
+                    await member.edit(deafen=True)
+                    await message.channel.send(f"🎧🔴 تم إعطاء Deafen لـ {member.mention} بنجاح.")
+                except discord.Forbidden:
+                    await message.channel.send("❌ لا أمتلك صلاحيات كافية لإعطاء Deafen لهذا العضو.")
+            else:
+                await message.channel.send(f"❌ {member.mention} ليس متواجداً في أي روم صوتي حالياً.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 6. أمر فك الدفن (إزالة Server Deafen) =================
+    elif command in ["فك_الدفن", "فك-الدفن"] or (len(parts) >= 2 and parts[0] == "فك" and parts[1] == "الدفن"):
+        if not message.author.guild_permissions.deafen_members:
+            await message.channel.send("❌ ليس لديك صلاحية لإدارة كتم الصوت.")
+            return
+        target_args = parts[2:] if (len(parts) >= 2 and parts[0] == "فك" and parts[1] == "الدفن") else args
+        user_id = get_user_id(target_args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن. مثال: `فك الدفن @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            if member.voice and member.voice.channel:
+                try:
+                    await member.edit(deafen=False)
+                    await message.channel.send(f"🎧🟢 تم إزالة Deafen عن {member.mention} بنجاح.")
+                except discord.Forbidden:
+                    await message.channel.send("❌ لا أمتلك صلاحيات كافية لفك Deafen عن هذا العضو.")
+            else:
+                await message.channel.send(f"❌ {member.mention} ليس متواجداً في أي روم صوتي حالياً.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 7. أمر ميوت (Server Mute باللون الأحمر) =================
+    elif command in ["ميوت", "mute"]:
+        if not message.author.guild_permissions.mute_members:
+            await message.channel.send("❌ ليس لديك صلاحية كتم المايك (Mute Members).")
+            return
+        user_id = get_user_id(args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن. مثال: `ميوت @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            if member.voice and member.voice.channel:
+                try:
+                    await member.edit(mute=True)
+                    await message.channel.send(f"🎙️🔴 تم إعطاء Mute صوّتي لـ {member.mention} بنجاح.")
+                except discord.Forbidden:
+                    await message.channel.send("❌ لا أمتلك صلاحيات كافية لإعطاء Mute لهذا العضو.")
+            else:
+                await message.channel.send(f"❌ {member.mention} ليس متواجداً في أي روم صوتي حالياً.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 8. أمر فك الميوت (إزالة Server Mute) =================
+    elif command in ["فك_الميوت", "فك-الميوت"] or (len(parts) >= 2 and parts[0] == "فك" and parts[1] in ["الميوت", "ميوت"]):
+        if not message.author.guild_permissions.mute_members:
+            await message.channel.send("❌ ليس لديك صلاحية لإدارة كتم المايك.")
+            return
+        target_args = parts[2:] if (len(parts) >= 2 and parts[0] == "فك") else args
+        user_id = get_user_id(target_args)
+        if not user_id:
+            await message.channel.send("⚠️ يرجى تحديد العضو بالمنشن. مثال: `فك الميوت @user`")
+            return
+        member = message.guild.get_member(user_id)
+        if member:
+            if member.voice and member.voice.channel:
+                try:
+                    await member.edit(mute=False)
+                    await message.channel.send(f"🎙️🟢 تم فك الـ Mute الصوتي عن {member.mention} بنجاح.")
+                except discord.Forbidden:
+                    await message.channel.send("❌ لا أمتلك صلاحيات كافية لفك Mute عن هذا العضو.")
+            else:
+                await message.channel.send(f"❌ {member.mention} ليس متواجداً في أي روم صوتي حالياً.")
+        else:
+            await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
+
+    # ================= 9. أمر حذف =================
     elif command == "حذف":
         if not message.author.guild_permissions.manage_messages:
             await message.channel.send("❌ ليس لديك صلاحية إدارة الرسائل.")
@@ -105,7 +196,7 @@ async def on_message(message):
         except discord.Forbidden:
             await message.channel.send("❌ لا أمتلك صلاحيات مسح الرسائل في هذا الروم.")
 
-    # ================= 6. أمر طرد (إخراج من الروم الصوتي) =================
+    # ================= 10. أمر طرد (إخراج من الروم الصوتي) =================
     elif command == "طرد":
         if not message.author.guild_permissions.move_members:
             await message.channel.send("❌ ليس لديك صلاحية نقل/طرد الأعضاء من الروم الصوتي (Move Members).")
@@ -127,7 +218,7 @@ async def on_message(message):
         else:
             await message.channel.send("❌ لم يتم العثور على هذا العضو في السيرفر.")
 
-    # ================= 7. أمر باند =================
+    # ================= 11. أمر باند =================
     elif command == "باند":
         if not message.author.guild_permissions.ban_members:
             await message.channel.send("❌ ليس لديك صلاحية حظر الأعضاء.")
@@ -145,7 +236,7 @@ async def on_message(message):
         except discord.NotFound:
             await message.channel.send("❌ لم يتم العثور على العضو.")
 
-    # ================= 8. أمر فك الباند =================
+    # ================= 12. أمر فك الباند =================
     elif command in ["فك_الباند", "فك-الباند", "فك_باند"] or (len(parts) >= 2 and parts[0] == "فك" and parts[1] == "الباند"):
         if not message.author.guild_permissions.ban_members:
             await message.channel.send("❌ ليس لديك صلاحية إدارة الحظر.")
@@ -164,7 +255,7 @@ async def on_message(message):
         except discord.Forbidden:
             await message.channel.send("❌ لا أمتلك صلاحية لفك الحظر.")
 
-    # ================= 9. أمر تايم (تايم أوت) =================
+    # ================= 13. أمر تايم (تايم أوت) =================
     elif command == "تايم":
         if not message.author.guild_permissions.moderate_members:
             await message.channel.send("❌ ليس لديك صلاحية إعطاء تايم أوت.")
@@ -184,7 +275,7 @@ async def on_message(message):
         else:
             await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
 
-    # ================= 10. أمر فك التايم =================
+    # ================= 14. أمر فك التايم =================
     elif command in ["فك_التايم", "فك-التايم"] or (len(parts) >= 2 and parts[0] == "فك" and parts[1] in ["التايم", "تايم"]):
         if not message.author.guild_permissions.moderate_members:
             await message.channel.send("❌ ليس لديك صلاحية إدارة التايم أوت.")
@@ -204,7 +295,7 @@ async def on_message(message):
         else:
             await message.channel.send("❌ لم يتم العثور على العضو في السيرفر.")
 
-    # ================= 11. أمر سحب =================
+    # ================= 15. أمر سحب =================
     elif command == "سحب":
         if not message.author.guild_permissions.move_members:
             await message.channel.send("❌ ليس لديك صلاحية نقل الأعضاء (Move Members).")
@@ -234,7 +325,7 @@ async def on_message(message):
         else:
             await message.channel.send("❌ لم يتم العثور على هذا العضو في السيرفر.")
 
-    # ================= 12. أمر معلومات =================
+    # ================= 16. أمر معلومات =================
     elif command in ["معلومات", "يوزر"]:
         user_id = get_user_id(args) if args else message.author.id
         member = message.guild.get_member(user_id) or message.author
@@ -247,7 +338,7 @@ async def on_message(message):
         embed.add_field(name="تاريخ إنشاء الحساب:", value=member.created_at.strftime("%Y-%m-%d"), inline=False)
         await message.channel.send(embed=embed)
 
-    # ================= 13. أمر سيرفر =================
+    # ================= 17. أمر سيرفر =================
     elif command in ["سيرفر", "السيرفر"]:
         guild = message.guild
         embed = discord.Embed(title=f"معلومات سيرفر {guild.name}", color=discord.Color.green())
@@ -259,7 +350,7 @@ async def on_message(message):
         embed.add_field(name="تاريخ الإنشاء:", value=guild.created_at.strftime("%Y-%m-%d"), inline=False)
         await message.channel.send(embed=embed)
 
-    # ================= 14. أمر اسكت =================
+    # ================= 18. أمر اسكت (كتم العضو كتابةً) =================
     elif command == "اسكت":
         if not message.author.guild_permissions.manage_roles:
             await message.channel.send("❌ ليس لديك صلاحية كتم الأعضاء.")
@@ -271,9 +362,9 @@ async def on_message(message):
         member = message.guild.get_member(user_id)
         if member:
             await message.channel.set_permissions(member, send_messages=False)
-            await message.channel.send(f"🤐 تم كتم {member.mention} في هذه القناة.")
+            await message.channel.send(f"🤐 تم كتم {member.mention} كتابةً في هذه القناة.")
 
-    # ================= 15. أمر تكلم =================
+    # ================= 19. أمر تكلم (فك كتم العضو كتابةً) =================
     elif command == "تكلم":
         if not message.author.guild_permissions.manage_roles:
             await message.channel.send("❌ ليس لديك صلاحية إدارة الأعضاء.")
@@ -285,16 +376,49 @@ async def on_message(message):
         member = message.guild.get_member(user_id)
         if member:
             await message.channel.set_permissions(member, send_messages=None)
-            await message.channel.send(f"🗣️ تم فك الكتم عن {member.mention} في هذه القناة.")
+            await message.channel.send(f"🗣️ تم فك كتم الكتابة عن {member.mention} في هذه القناة.")
 
-    # ================= 16. أمر أوامر =================
+    # ================= الإضافة 1: أمر افتار (عرض الصورة الشخصية) =================
+    elif command in ["افتار", "أفتار", "رمزية", "avatar"]:
+        user_id = get_user_id(args) if args else message.author.id
+        user = message.guild.get_member(user_id) or await bot.fetch_user(user_id)
+        
+        if user:
+            avatar_url = user.display_avatar.url
+            embed = discord.Embed(title=f"🖼️ صورة: {user.display_name}", color=discord.Color.purple())
+            embed.set_image(url=avatar_url)
+            embed.description = f"[رابط الصورة المباشر]({avatar_url})"
+            await message.channel.send(embed=embed)
+        else:
+            await message.channel.send("❌ لم يتم العثور على هذا المستخدم.")
+
+    # ================= الإضافة 2: أمر بنق (فحص سرعة استجابة البوت) =================
+    elif command in ["بنق", "بينق", "ping"]:
+        latency = round(bot.latency * 1000)
+        await message.channel.send(f"🏓 **Pong!** سرعة الاستجابة: `{latency}ms`")
+
+    # ================= الأمر البديل: أمر رست (إعادة تشغيل البوت) =================
+    elif command in ["رست", "reset", "رسست"]:
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("❌ ليس لديك صلاحية استخدام هذا الأمر (يتطلب أدمن).")
+            return
+
+        await message.channel.send("🔄 جاري إعادة تشغيل البوت...")
+        await bot.close()
+        os.execv(sys.executable, ['python'] + sys.argv)
+
+    # ================= 20. أمر أوامر =================
     elif command in ["اوامر", "الأوامر"]:
         help_msg = (
             "**📌 قائمة أوامر البوت العربية:**\n"
-            "• `قفل` : إخفاء وقفل الروم عن الجميع.\n"
-            "• `فتح` : إظهار وفتح الروم للجميع.\n"
-            "• `قفل الكتابة` : منع الكتابة في الروم.\n"
-            "• `فتح الكتابة` : السماح بالكتابة في الروم.\n"
+            "• `قفل` : إخفاء الروم بالكامل عن الجميع.\n"
+            "• `فتح` : إظهار الروم للجميع.\n"
+            "• `قفل الشات` : منع الكتابة في الروم فقط.\n"
+            "• `فتح الشات` : السماح بالكتابة في الروم فقط.\n"
+            "• `دفن @user` : إعطاء Deafen صوّتي (الأحمر) بالروم الصوتي.\n"
+            "• `فك الدفن @user` : إزالة الـ Deafen الصوتي.\n"
+            "• `ميوت @user` : إعطاء Mute صوّتي (الأحمر) بالروم الصوتي.\n"
+            "• `فك الميوت @user` : إزالة الـ Mute الصوتي.\n"
             "• `حذف [عدد]` : مسح الرسائل.\n"
             "• `طرد @user` : طرد عضو من الروم الصوتي.\n"
             "• `باند @user` : حظر عضو من السيرفر.\n"
@@ -302,10 +426,13 @@ async def on_message(message):
             "• `تايم @user` : إعطاء تايم أوت.\n"
             "• `فك التايم @user` : إزالة التايم أوت.\n"
             "• `سحب @user` : نقل العضو لرومك الصوتي.\n"
+            "• `اسكت @user` : كتم العضو كتابةً في الروم الحالي.\n"
+            "• `تكلم @user` : فك كتم الكتابة عن العضو.\n"
             "• `معلومات @user` : عرض معلومات حساب العضو.\n"
             "• `سيرفر` : عرض معلومات السيرفر.\n"
-            "• `اسكت @user` : كتم العضو في الروم الحالي.\n"
-            "• `تكلم @user` : فك الكتم في الروم الحالي."
+            "• `افتار @user` : عرض الصورة الشخصية للعضو.\n"
+            "• `بنق` : فحص سرعة استجابة البوت.\n"
+            "• `رست` : إعادة تشغيل البوت (للأدمن فقط)."
         )
         await message.channel.send(help_msg)
 
@@ -314,7 +441,7 @@ async def on_message(message):
 # --- 5. تشغيل السيرفر والبوت ---
 keep_alive()
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("MTU0NjE3NjEwMDM2NTc2MjcyMQ.Grx_Dp.q090FGishWuE33Y3gLEE2LJGisq4XgXALpmIZo")
 if TOKEN:
     bot.run(TOKEN)
 else:
