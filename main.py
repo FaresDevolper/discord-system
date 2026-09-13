@@ -1,4 +1,3 @@
-هذا هو الكود تأكد منه وافحصه الحين بحطه 
 import os
 import re
 import sys
@@ -60,23 +59,23 @@ async def on_message(message):
     full_text = message.content.strip()
     args = parts[1:]
 
-    # ================= 1. أمر قفل الشات (منع الكتابة فقط) =================
-    if full_text in ["قفل الشات", "قفل_الشات", "قفل-الشات"] or (len(parts) >= 2 and parts[0] == "قفل" and parts[1] == "الشات"):
+    # ================= 1. أمر وقف الشات (منع الكتابة فقط مع إبقاء الروم ظاهراً) =================
+    if full_text in ["وقف الشات", "وقف_الشات", "وقف-الشات"] or (len(parts) >= 2 and parts[0] == "وقف" and parts[1] == "الشات"):
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=False)
         await message.channel.send("🚫 تم قفل الشات ومنع الكتابة للجميع بنجاح.")
 
-    # ================= 2. أمر فتح الشات (السماح بالكتابة فقط) =================
-    elif full_text in ["فتح الشات", "فتح_الشات", "فتح-الشات"] or (len(parts) >= 2 and parts[0] == "فتح" and parts[1] == "الشات"):
+    # ================= 2. أمر شات (السماح بالكتابة مجدداً) =================
+    elif command == "شات":
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=True)
         await message.channel.send("💬 تم فتح الشات والسماح بالكتابة للجميع بنجاح.")
 
-    # ================= 3. أمر قفل (إخفاء الروم بالكامل) =================
+    # ================= 3. أمر قفل (إخفاء الروم بالكامل عن الجميع) =================
     elif command == "قفل":
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
@@ -84,7 +83,7 @@ async def on_message(message):
         await message.channel.set_permissions(message.guild.default_role, view_channel=False)
         await message.channel.send("🔒 تم إخفاء وقفل الروم عن جميع الأعضاء بنجاح.")
 
-    # ================= 4. أمر فتح (إظهار الروم للجميع) =================
+    # ================= 4. أمر فتح (إظهار الروم بالكامل للجميع) =================
     elif command == "فتح":
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
@@ -401,7 +400,7 @@ async def on_message(message):
     # ================= الأمر البديل: أمر رست (إعادة تشغيل البوت) =================
     elif command in ["رست", "reset", "رسست"]:
         if not message.author.guild_permissions.administrator:
-            await message.channel.send("❌ ليس لديك صلاحية استخدام هذا الأمر (يتطلب أدمن).")
+            await message.channel.send("❌ ليس لديك صلاحية استخدام هذا الأمر (يتطلب موافقة فروس).")
             return
 
         await message.channel.send("🔄 جاري إعادة تشغيل البوت...")
@@ -411,11 +410,11 @@ async def on_message(message):
     # ================= 20. أمر أوامر =================
     elif command in ["اوامر", "الأوامر"]:
         help_msg = (
-            "**📌 قائمة أوامر البوت العربية:**\n"
+            "**👁️ قائمة أوامر السستم :**\n"
             "• `قفل` : إخفاء الروم بالكامل عن الجميع.\n"
             "• `فتح` : إظهار الروم للجميع.\n"
-            "• `قفل الشات` : منع الكتابة في الروم فقط.\n"
-            "• `فتح الشات` : السماح بالكتابة في الروم فقط.\n"
+            "• `وقف الشات` : منع الكتابة في الروم فقط مع إبقاء الروم ظاهراً.\n"
+            "• `شات` : السماح بالكتابة في الروم مجدداً.\n"
             "• `دفن @user` : إعطاء Deafen صوّتي (الأحمر) بالروم الصوتي.\n"
             "• `فك الدفن @user` : إزالة الـ Deafen الصوتي.\n"
             "• `ميوت @user` : إعطاء Mute صوّتي (الأحمر) بالروم الصوتي.\n"
@@ -433,7 +432,7 @@ async def on_message(message):
             "• `سيرفر` : عرض معلومات السيرفر.\n"
             "• `افتار @user` : عرض الصورة الشخصية للعضو.\n"
             "• `بنق` : فحص سرعة استجابة البوت.\n"
-            "• `رست` : إعادة تشغيل البوت (للأدمن فقط)."
+            "• `رست` : إعادة تشغيل البوت (لفروس فقط)."
         )
         await message.channel.send(help_msg)
 
