@@ -1,3 +1,4 @@
+هذا هو الكود تأكد منه وافحصه الحين بحطه 
 import os
 import re
 import sys
@@ -59,37 +60,37 @@ async def on_message(message):
     full_text = message.content.strip()
     args = parts[1:]
 
-    # ================= 1. أمر قفل (إخفاء الروم بالكامل) =================
-    if command == "قفل":
-        if not message.author.guild_permissions.manage_channels:
-            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
-            return
-        await message.channel.set_permissions(message.guild.default_role, view_channel=False)
-        await message.channel.send("🔒 تم إخفاء وقفل الروم عن جميع الأعضاء بنجاح.")
-
-    # ================= 2. أمر فتح (إظهار الروم للجميع) =================
-    elif command == "فتح":
-        if not message.author.guild_permissions.manage_channels:
-            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
-            return
-        await message.channel.set_permissions(message.guild.default_role, view_channel=True)
-        await message.channel.send("🔓 تم إظهار وفتح الروم للجميع بنجاح.")
-
-    # ================= 3. أمر قفل الشات (منع الكتابة فقط) =================
-    elif full_text == "قفل الشات" or command in ["قفل_الشات", "قفل-الشات"] or (len(parts) >= 2 and parts[0] == "قفل" and parts[1] == "الشات"):
+    # ================= 1. أمر قفل الشات (منع الكتابة فقط) =================
+    if full_text in ["قفل الشات", "قفل_الشات", "قفل-الشات"] or (len(parts) >= 2 and parts[0] == "قفل" and parts[1] == "الشات"):
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=False)
         await message.channel.send("🚫 تم قفل الشات ومنع الكتابة للجميع بنجاح.")
 
-    # ================= 4. أمر فتح الشات (السماح بالكتابة فقط) =================
-    elif full_text == "فتح الشات" or command in ["فتح_الشات", "فتح-الشات"] or (len(parts) >= 2 and parts[0] == "فتح" and parts[1] == "الشات"):
+    # ================= 2. أمر فتح الشات (السماح بالكتابة فقط) =================
+    elif full_text in ["فتح الشات", "فتح_الشات", "فتح-الشات"] or (len(parts) >= 2 and parts[0] == "فتح" and parts[1] == "الشات"):
         if not message.author.guild_permissions.manage_channels:
             await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
             return
         await message.channel.set_permissions(message.guild.default_role, send_messages=True)
         await message.channel.send("💬 تم فتح الشات والسماح بالكتابة للجميع بنجاح.")
+
+    # ================= 3. أمر قفل (إخفاء الروم بالكامل) =================
+    elif command == "قفل":
+        if not message.author.guild_permissions.manage_channels:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
+            return
+        await message.channel.set_permissions(message.guild.default_role, view_channel=False)
+        await message.channel.send("🔒 تم إخفاء وقفل الروم عن جميع الأعضاء بنجاح.")
+
+    # ================= 4. أمر فتح (إظهار الروم للجميع) =================
+    elif command == "فتح":
+        if not message.author.guild_permissions.manage_channels:
+            await message.channel.send("❌ ليس لديك صلاحية إدارة القنوات.")
+            return
+        await message.channel.set_permissions(message.guild.default_role, view_channel=True)
+        await message.channel.send("🔓 تم إظهار وفتح الروم للجميع بنجاح.")
 
     # ================= 5. أمر دفن (Server Deafen باللون الأحمر) =================
     elif command in ["دفن", "deafen"]:
