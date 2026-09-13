@@ -441,8 +441,6 @@ async def on_message(message):
 # --- 5. تشغيل السيرفر والبوت ---
 keep_alive()
 
-TOKEN = os.getenv("MTU0NjE3NjEwMDM2NTc2MjcyMQ.Grx_Dp.q090FGishWuE33Y3gLEE2LJGisq4XgXALpmIZo")
+TOKEN = os.getenv("MTU0NjE3NjEwMDM2NTc2MjcyMQ.G3fH0b.1qEGBv6_wOR1iDv53VDbF9g5rRQ_Avfkaq8a3E")
 if TOKEN:
     bot.run(TOKEN)
-else:
-    print("❌ Error: DISCORD_TOKEN is not set in Environment Variables.")
