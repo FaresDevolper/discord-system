@@ -186,7 +186,7 @@ async def on_message(message):
         if not message.author.guild_permissions.manage_messages:
             await message.channel.send("❌ ليس لديك صلاحية إدارة الرسائل.")
             return
-        amount = 100
+        amount = 5000
         if args and args[0].isdigit():
             amount = int(args[0])
         try:
