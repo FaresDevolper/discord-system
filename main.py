@@ -407,6 +407,44 @@ async def on_message(message):
         await bot.close()
         os.execv(sys.executable, ['python'] + sys.argv)
 
+    # ================= أمر !سي (إرسال رسالة عبر البوت إلى روم محدد) =================
+    elif command in ["!سي", "!say"]:
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("❌ ليس لديك صلاحية استخدام هذا الأمر.")
+            return
+
+        say_parts = full_text.split(None, 2)  # [الأمر, ايدي الروم, الكلام]
+        channel_id = None
+        if len(say_parts) >= 2:
+            id_match = re.search(r'\d+', say_parts[1])
+            if id_match:
+                channel_id = int(id_match.group())
+        text = say_parts[2] if len(say_parts) >= 3 else ""
+
+        if not channel_id or (not text and not message.attachments):
+            await message.channel.send("❌ الاستخدام: `!سي ايدي_الروم الكلام`")
+            return
+
+        target_channel = bot.get_channel(channel_id)
+        if target_channel is None:
+            try:
+                target_channel = await bot.fetch_channel(channel_id)
+            except (discord.NotFound, discord.Forbidden):
+                target_channel = None
+        if target_channel is None:
+            await message.channel.send("❌ لم أجد هذا الروم، تأكد من الـ ID وأن البوت موجود في السيرفر.")
+            return
+
+        try:
+            files = [await a.to_file() for a in message.attachments]
+            await target_channel.send(content=text or None, files=files)
+            try:
+                await message.delete()  # يحذف رسالتك عشان ما يبان إنك أنت اللي كتبت
+            except discord.HTTPException:
+                pass
+        except discord.Forbidden:
+            await message.channel.send("❌ لا أمتلك صلاحية الكتابة في هذا الروم.")
+
     # ================= 20. أمر أوامر =================
     elif command in ["اوامر", "الأوامر"]:
         help_msg = (
